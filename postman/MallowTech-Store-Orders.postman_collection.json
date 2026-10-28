@@ -1,0 +1,505 @@
+{
+  "info": {
+    "_postman_id": "2e9e19f5-ef4d-45a1-9e37-430e0e420b76",
+    "name": "MallowTech Store Orders API",
+    "description": "Postman requests for the Laravel store order and inventory API. Select the included MallowTech Local environment or set base_url manually. Run Low Stock Products first to inspect inventory, then set product_id to an available product ID before creating an order. Creating an order permanently deducts stock.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Sample Product\",\n  \"code\": \"POSTMAN-{{timestamp}}\",\n  \"price\": \"12.50\",\n  \"tax_rate\": \"5.00\",\n  \"stock\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "Creates a product with a unique code, price, tax rate, and initial stock. Run this before Create Order if your catalog is empty. The code includes a timestamp to help avoid unique-code conflicts."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('timestamp', Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Product is created', function () { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Created product includes stock and price', function () {",
+                  "    pm.expect(body.data).to.have.property('id');",
+                  "    pm.expect(body.data).to.have.property('stock');",
+                  "    pm.expect(body.data).to.have.property('price');",
+                  "});",
+                  "if (body.data && body.data.id) {",
+                  "    pm.collectionVariables.set('product_id', String(body.data.id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Increase Product Stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/products/{{product_id}}/restock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "{{product_id}}",
+                "restock"
+              ]
+            },
+            "description": "Adds quantity to an existing product's stock. Set product_id to the product you want to replenish. The update is atomic; only positive whole-number quantities are accepted."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Product stock is increased', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response contains updated stock', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.data.id).to.eql(Number(pm.variables.get('product_id')));",
+                  "    pm.expect(body.data.stock).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Low Stock Products (default threshold)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/products/low-stock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "low-stock"
+              ]
+            },
+            "description": "Returns products below LOW_STOCK_THRESHOLD (5 by default). Use the response to find low-stock product IDs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response contains threshold and product list', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.threshold).to.be.a('number');",
+                  "    pm.expect(body.data).to.be.an('array');",
+                  "});",
+                  "const products = pm.response.json().data;",
+                  "if (products.length > 0) {",
+                  "    pm.collectionVariables.set('low_stock_product_id', String(products[0].id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Low Stock Products (custom threshold)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/products/low-stock?threshold={{low_stock_threshold}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "low-stock"
+              ],
+              "query": [
+                {
+                  "key": "threshold",
+                  "value": "{{low_stock_threshold}}"
+                }
+              ]
+            },
+            "description": "Returns products with stock strictly below the configurable threshold."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response uses the requested threshold', function () {",
+                  "    pm.expect(pm.response.json().threshold).to.eql(Number(pm.variables.get('low_stock_threshold')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Low Stock Products (invalid threshold example)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/products/low-stock?threshold=-1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "products",
+                "low-stock"
+              ],
+              "query": [
+                {
+                  "key": "threshold",
+                  "value": "-1"
+                }
+              ]
+            },
+            "description": "Validation example: a negative threshold should return 422 Unprocessable Content."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Negative threshold is rejected', function () { pm.response.to.have.status(422); });",
+                  "pm.test('Validation error is returned', function () {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('threshold');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer\": {\n    \"name\": \"Postman Sample Customer\",\n    \"email\": \"postman.customer@example.com\"\n  },\n  \"items\": [\n    {\n      \"product_id\": {{product_id}},\n      \"quantity\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "Creates an order, calculates subtotal/tax/total, deducts stock, and queues a confirmation job. Change product_id and quantity to match available stock. This request is not safe to repeat without considering that each successful run deducts stock."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order is created', function () { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Response contains order totals and lines', function () {",
+                  "    pm.expect(body.data).to.have.property('id');",
+                  "    pm.expect(body.data).to.have.property('subtotal');",
+                  "    pm.expect(body.data).to.have.property('tax_amount');",
+                  "    pm.expect(body.data).to.have.property('total');",
+                  "    pm.expect(body.data.items).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "if (body.data && body.data.id) {",
+                  "    pm.collectionVariables.set('last_order_id', String(body.data.id));",
+                  "    pm.collectionVariables.set('customer_email', body.data.customer.email);",
+                  "    pm.collectionVariables.set('product_id', String(body.data.items[0].product_id));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Order (insufficient stock example)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer\": {\n    \"name\": \"Postman Stock Check\",\n    \"email\": \"postman.stock-check@example.com\"\n  },\n  \"items\": [\n    {\n      \"product_id\": {{product_id}},\n      \"quantity\": 2147483647\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "Edge-case example: requests an intentionally unfulfillable quantity and expects a 422 validation response. The transaction should leave all product stocks and orders unchanged. Set product_id to an existing product first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Insufficient stock is rejected cleanly', function () { pm.response.to.have.status(422); });",
+                  "pm.test('Stock error is reported on items', function () {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('items');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Customer Order History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/customers/orders?email={{customer_email}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "customers",
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "email",
+                  "value": "{{customer_email}}"
+                }
+              ]
+            },
+            "description": "Returns paginated order history for the email used in Create Order. Use a known customer email if you have not created an order yet."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Customer order history is returned', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response contains paginated orders', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.data).to.be.an('array');",
+                  "    pm.expect(body).to.have.property('current_page');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer Order History (unknown email example)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/customers/orders?email=unknown.customer@example.com",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "customers",
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "email",
+                  "value": "unknown.customer@example.com"
+                }
+              ]
+            },
+            "description": "Not-found example: an email that has no customer should return 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Unknown customer returns 404', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "product_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "low_stock_threshold",
+      "value": "10",
+      "type": "string"
+    },
+    {
+      "key": "customer_email",
+      "value": "postman.customer@example.com",
+      "type": "string"
+    },
+    {
+      "key": "last_order_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "low_stock_product_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
