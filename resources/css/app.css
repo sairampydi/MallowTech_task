@@ -56,6 +56,13 @@ select {
     height: 100%;
     align-items: center;
     justify-content: space-between;
+    gap: 16px;
+}
+
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 9px;
 }
 
 .brand {
@@ -415,6 +422,27 @@ input::placeholder {
     background: #eaf2fe;
 }
 
+.button-nav {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid #536274;
+    color: #fff;
+    background: #2d3b4e;
+}
+
+.button-nav:hover {
+    background: #3a4b61;
+}
+
+.button-nav-secondary {
+    border-color: #3b78c7;
+    background: #2867c7;
+}
+
+.button-nav-secondary:hover {
+    background: #1f58ad;
+}
+
 .button-primary {
     min-height: 46px;
     color: #fff;
@@ -660,6 +688,113 @@ input::placeholder {
     margin-top: 15px;
 }
 
+.modal {
+    width: min(460px, calc(100% - 32px));
+    max-width: none;
+    max-height: min(90vh, 760px);
+    padding: 0;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    color: var(--ink);
+    background: #fff;
+    box-shadow: 0 24px 80px rgb(19 34 55 / 26%);
+}
+
+.modal::backdrop {
+    background: rgb(21 33 49 / 55%);
+    backdrop-filter: blur(2px);
+}
+
+.modal-form {
+    padding: 23px;
+}
+
+.modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.modal-header .eyebrow {
+    margin-bottom: 5px;
+}
+
+.modal-header h2 {
+    margin-bottom: 5px;
+    font-size: 20px;
+}
+
+.modal-description {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.modal-close {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 0;
+    border-radius: 8px;
+    color: #68778c;
+    background: #f1f4f8;
+    font-size: 21px;
+}
+
+.modal-close:hover {
+    color: #26364c;
+    background: #e7edf5;
+}
+
+.modal-fields {
+    display: grid;
+    gap: 14px;
+}
+
+.modal-fields-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.modal-fields input,
+.modal-fields select {
+    width: 100%;
+}
+
+.modal-error {
+    display: none;
+    margin: 15px 0 0;
+    padding: 10px 12px;
+    border-radius: 7px;
+    color: #9f3434;
+    background: #fff1ef;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.modal-error.is-visible {
+    display: block;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+    padding-top: 20px;
+}
+
+.modal-actions .button-primary:disabled {
+    cursor: wait;
+    opacity: 0.65;
+    transform: none;
+}
+
 .visually-hidden {
     position: absolute;
     width: 1px;
@@ -688,11 +823,22 @@ input::placeholder {
     }
 
     .topbar {
-        height: 58px;
+        height: auto;
+        min-height: 58px;
     }
 
     .topbar-note {
-        font-size: 10px;
+        display: none;
+    }
+
+    .topbar-actions {
+        gap: 6px;
+    }
+
+    .button-nav {
+        min-height: 34px;
+        padding: 0 9px;
+        font-size: 11px;
     }
 
     .page-shell {
@@ -706,6 +852,10 @@ input::placeholder {
     .customer-fields,
     .sidebar {
         grid-template-columns: 1fr;
+    }
+
+    .modal-form {
+        padding: 18px;
     }
 
     .customer-card,

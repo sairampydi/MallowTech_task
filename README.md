@@ -1,43 +1,141 @@
-# Store Order & Inventory API
+# Store Order & Inventory Mini-System
 
-A Laravel API for recording customer orders, calculating tax, and maintaining product stock without overselling inventory. This implements the supplied Mallow Technologies Laravel Developer Mini Task.
+A Laravel 12 application for a retail counter to maintain a product catalog, record customer orders, calculate tax, and keep inventory in sync. It includes a JSON API and a browser-based billing screen.
 
-The root page (`/`) also provides a responsive billing screen with customer details, product selection, live totals and change, a low-stock panel, and a printable bill after order creation.
+## Features
+
+- Create products and add inventory with dedicated API endpoints.
+- Create orders for existing or new customers, with one or more products.
+- Calculate and save order and order-line subtotals, tax, and totals.
+- Decrement inventory without allowing an order to oversell available stock.
+- Look up a customer's paginated order history by email.
+- See products below a configurable low-stock threshold.
+- Queue a simulated order-confirmation email after the order transaction commits.
+- Use the responsive billing screen to make orders, check totals and change, view low-stock alerts, and print a bill.
 
 ## Requirements
 
-- PHP 8.2+
-- Composer
-- SQLite (the default) or another Laravel-supported database
+- PHP 8.2 or newer with PDO SQLite enabled (or extensions for your chosen database).
+- Composer 2.
+- Node.js and npm (to build the browser assets).
 
-## Setup
+The project uses Laravel 12, SQLite by default, Vite for frontend assets, and the database queue driver by default.
+
+## Installation and setup
+
+Run these commands from the project directory.
+
+### Windows PowerShell
+
+```powershell
+composer install
+Copy-Item .env.example .env
+php artisan key:generate
+New-Item -ItemType File -Force database\database.sqlite
+php artisan migrate --seed
+npm ci
+npm run build
+```
+
+If you already have a `.env` file, keep it and do not overwrite it with `.env.example`.
+
+### macOS/Linux
 
 ```bash
 composer install
-copy .env.example .env
+cp .env.example .env
 php artisan key:generate
+touch database/database.sqlite
 php artisan migrate --seed
+npm ci
+npm run build
 ```
 
-On macOS/Linux, use `cp .env.example .env` instead of `copy`.
+The supplied `.env.example` selects SQLite and `database/database.sqlite`. Review `.env` before migrating. For another Laravel-supported database, set the corresponding `DB_CONNECTION` and connection settings first.
 
-The starter project already includes a SQLite database configuration. To use it explicitly, set `DB_CONNECTION=sqlite` in `.env` and ensure `database/database.sqlite` exists. Start the API with:
+To load the sample catalog again after an existing seed, run:
+
+```bash
+php artisan db:seed
+```
+
+The sample seeder uses stable product codes and customer emails, so rerunning it updates those sample records rather than adding duplicates. It resets the seeded products' sample stock to their configured values. **Do not rerun it against a database whose stock must be preserved.**
+
+## Run the application
+
+Start the web application:
 
 ```bash
 php artisan serve
 ```
 
-For asynchronous confirmation logging, run a queue worker in a second terminal:
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) for the billing screen. API requests use the same host and port.
+
+The queue driver is `database`. Run a worker in another terminal to process order confirmations:
 
 ```bash
 php artisan queue:work
 ```
 
-The default queue connection is the database. The queued job writes a simulated confirmation to `storage/logs/laravel.log`; it does not send real email. To exercise the API without a worker, the job remains in the queue until a worker is started.
+The job simulates an email by writing an entry to `storage/logs/laravel.log`; no SMTP service or real email is used. Without a queue worker, confirmations remain queued.
+
+The committed production assets are built with `npm run build`. During frontend development, run `npm run dev` in a separate terminal while serving Laravel.
+
+## Configuration
+
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `DB_CONNECTION` | `sqlite` | Database connection. |
+| `DB_BUSY_TIMEOUT` | `5000` | SQLite wait time in milliseconds when another writer holds the database. |
+| `QUEUE_CONNECTION` | `database` | Queue backend for confirmation jobs. |
+| `LOW_STOCK_THRESHOLD` | `5` | Default product stock level used by the low-stock endpoint and billing screen. |
+| `MAIL_MAILER` | `log` | Mail configuration; the confirmation job currently logs a simulation instead. |
+
+The low-stock endpoint also accepts a per-request `threshold` query parameter.
 
 ## API
 
-All responses are JSON. Validation errors use Laravel's standard `422` response format.
+All API routes are under `/api`. Send `Accept: application/json`; send `Content-Type: application/json` with JSON request bodies. Laravel returns validation failures as `422 Unprocessable Content`. The API does not require authentication in this mini-task; add appropriate authentication and authorization before exposing it beyond a trusted development environment.
+
+### Create a product
+
+`POST /api/products`
+
+```json
+{
+  "name": "Counter Biscuit",
+  "code": "BISCUIT-100",
+  "price": "12.50",
+  "tax_rate": "5.00",
+  "stock": 20
+}
+```
+
+Creates a product and returns `{ "data": { ... } }` with `201 Created`. The product code must be unique. Price must be non-negative with at most two decimal places. Tax rate must be between 0 and 100 percent, with at most two decimal places. Initial stock must be a non-negative integer.
+
+### Increase product stock
+
+`POST /api/products/{product_id}/restock`
+
+```json
+{
+  "quantity": 10
+}
+```
+
+Adds a positive integer quantity to an existing product's stock and returns the updated product with `200 OK`. The addition is a database-side atomic increment, so simultaneous restock requests are not lost. An unknown product returns `404`; an invalid quantity returns `422`.
+
+### View products below the low-stock threshold
+
+`GET /api/products/low-stock`
+
+Returns `{ "threshold": 5, "data": [...] }` using the configured default threshold. A product is considered low stock when its stock is **strictly less than** the threshold.
+
+Example override:
+
+`GET /api/products/low-stock?threshold=10`
+
+The threshold must be a non-negative integer.
 
 ### Create an order
 
@@ -56,87 +154,78 @@ All responses are JSON. Validation errors use Laravel's standard `422` response 
 }
 ```
 
-The request creates or updates the customer with the supplied email, combines repeated product IDs into one order line, calculates line and order totals, decrements stock, and returns the order with its customer, item, and product details (`201 Created`). Product IDs must exist and quantities must be positive integers. If any product has insufficient stock, the request returns `422` and the transaction leaves the entire order and all stock unchanged.
+Creates an order and returns it, including its customer and product lines, with `201 Created`. The email and name are required. Each item must reference an existing product and have a positive integer quantity. Insufficient stock returns `422` and leaves the order and all stock unchanged.
 
-### Customer order history
+### View customer order history
 
 `GET /api/customers/orders?email=alex@example.com`
 
-Returns the customer's orders, newest first, with pagination (15 orders per page) and their items. Returns `404` when that email has no customer.
-
-### Low-stock products
-
-`GET /api/products/low-stock`
-
-Returns products whose stock is below `LOW_STOCK_THRESHOLD` (default `5`). Override the threshold for a request with `?threshold=10`; the threshold is a non-negative integer, and the comparison is strictly less than the threshold.
-
-### Create a product
-
-`POST /api/products`
-
-```json
-{
-  "name": "Counter Biscuit",
-  "code": "BISCUIT-100",
-  "price": "12.50",
-  "tax_rate": "5.00",
-  "stock": 20
-}
-```
-
-Creates a product and returns it with `201 Created`. Product codes must be unique; price and tax rate allow up to two decimal places, tax rate must be between 0 and 100 percent, and initial stock must be a non-negative integer.
-
-### Increase product stock
-
-`POST /api/products/{product_id}/restock`
-
-```json
-{
-  "quantity": 10
-}
-```
-
-Adds the positive integer quantity to an existing product's current stock and returns the updated product. This uses a database-side atomic increment, so simultaneous restock requests are both applied. An unknown product returns `404`; an invalid quantity returns `422`.
-
-## Postman collection
-
-Import [`postman/MallowTech-Store-Orders.postman_collection.json`](./postman/MallowTech-Store-Orders.postman_collection.json) and optionally [`postman/MallowTech-Local.postman_environment.json`](./postman/MallowTech-Local.postman_environment.json) into Postman. Start the Laravel app with `php artisan serve`, select the **MallowTech Local** environment, then run **Low Stock Products** to inspect inventory before creating an order.
-
-The collection's default `product_id` is `1`, matching the first sample product in a fresh seeded database. Update that variable if your product has a different ID. Successful order requests permanently deduct stock. The collection also includes insufficient-stock, invalid-threshold, and unknown-customer examples, plus saved variables for the created customer's email and order ID.
+Returns the customer's orders, newest first, with their order items and product details. Results are paginated 15 orders per page. An unknown email returns `404`.
 
 ## Billing screen
 
-Visit `/` to create an order through the browser. The screen loads the product catalog, calculates line and order totals as quantities change, and shows the remaining balance when an amount received is entered. Placing an order uses the same `POST /api/orders` endpoint as API clients. Once it succeeds, the screen displays a printable bill and refreshes the low-stock alert.
+The root route (`/`) renders the billing screen. The navbar's **Add product** button opens a form for product code, name, price, tax rate, and initial stock; **Restock** opens a product selector and quantity form to increase an existing product's stock. Both actions use the product APIs above and update the order selectors and low-stock panel without a page reload.
 
-The amount received and change are shown for cashier convenience; only the order and its product totals are persisted. The confirmation job logs a simulated email and does not create or send a PDF attachment.
+Select a product and quantity to see line totals, subtotal, tax, and grand total update. The optional amount-received field shows a balance due or change to return. **Generate bill** submits the same `POST /api/orders` request used by API clients. On success, the screen displays a printable bill and a **New order** button; selecting it clears the completed form and re-enables it for the next order.
 
-## Data and design decisions
+The amount received and balance/change are cashier-only display values. They are not stored as payments or included in the order records. The bill is a printable browser view, not a generated PDF or email attachment.
 
-- `products`, `customers`, `orders`, and `order_items` are separate normalized tables. Product codes and customer emails are unique.
-- Order items snapshot the product unit price and tax rate at the time of sale, so later catalog changes do not rewrite order history.
-- Tax is calculated for each order line from its extended subtotal and rounded half-up to cents. Order totals are the sum of those line totals.
-- Submitting an existing customer's email updates the customer's name with the latest supplied name.
-- Repeated product IDs in a request are combined, and one item is stored per order/product pair.
-- Order history uses standard Laravel pagination to avoid unbounded responses.
-- Inventory is decremented inside the same database transaction that creates the order. Each decrement is a conditional SQL update (`stock >= requested quantity`) and product rows are processed in ascending ID order. Row-locking databases serialize competing updates; the conditional update prevents a decrement below zero. SQLite uses a busy timeout and transaction retries for competing writers.
-- A queued `SendOrderConfirmation` job is dispatched after the order transaction commits. The job logs a simulated confirmation rather than sending SMTP mail.
+## Postman
 
-The low-stock threshold can be set in `.env`:
+Import [`postman/MallowTech-Store-Orders.postman_collection.json`](./postman/MallowTech-Store-Orders.postman_collection.json) and optionally [`postman/MallowTech-Local.postman_environment.json`](./postman/MallowTech-Local.postman_environment.json) into Postman. Select **MallowTech Local** and update `base_url` if the server is running at another address.
 
-```dotenv
-LOW_STOCK_THRESHOLD=5
-```
+The collection contains requests for product creation and restocking, low-stock lookups, order creation, and customer order history, including validation/not-found examples. Update `product_id` to a product in your database before ordering or restocking. Each successful order deducts stock; repeated runs create additional orders and consume more inventory.
 
-## Tests
+## Assumptions and design decisions
 
-Run the feature and unit tests with:
+### Data model
+
+- `products`, `customers`, `orders`, and `order_items` are separate tables. Orders belong to a customer; order items connect orders and products.
+- Product code and customer email are unique identifiers.
+- Product prices and tax rates are decimals, not binary floating-point values, and order calculations use integer minor currency units.
+- An order item snapshots its unit price and tax rate when the order is placed. Historical order totals therefore do not change if the catalog is later updated.
+- There is one tax rate per product. Tax is calculated for each product line from its extended subtotal and rounded half-up to cents; order tax and total are sums of the line amounts.
+- Repeated product IDs in an order request are combined into one order line.
+- Submitting an email already in the customer table updates that customer's name to the name in the latest order request.
+- No payment records, shipping, discounts, product editing/deletion, or customer editing API were requested. The billing screen's amount-received value is not persisted.
+
+### Inventory and concurrency
+
+- A stock check alone is not safe against concurrent orders. Order creation instead performs a conditional database decrement (`stock >= requested quantity`) within the transaction that creates the order and its lines.
+- Requested product rows are processed in ascending ID order to reduce deadlock risk. A failed stock decrement raises a validation error, and the transaction rolls back every decrement and order write.
+- Databases with row-level locking serialize conflicting updates. SQLite serializes writers; the configured busy timeout and Laravel transaction retries help with concurrent write contention. For production multi-user workloads, use a database with robust row-level locking and test against that database engine.
+- Restocking uses a separate atomic increment endpoint so concurrent additions are not lost.
+
+### API and asynchronous work
+
+- The brief does not prescribe endpoint URLs or response envelopes; this project uses the `/api` routes documented above and wraps individual created/updated resources in a `data` field.
+- Missing customers in order-history lookup return `404`; invalid input and insufficient stock return Laravel's standard `422` JSON validation response.
+- The low-stock comparison is strictly less than the threshold. The threshold is configurable globally and can be overridden per request.
+- Confirmation work is dispatched after the order transaction commits. The job logs a simulated confirmation; it does not send SMTP mail.
+- The mini-task does not specify authentication, so endpoints are unauthenticated in this implementation. Add authentication, authorization, rate limiting, and operational safeguards before production use.
+
+## Tests and code style
+
+Run the PHPUnit feature and unit test suites:
 
 ```bash
 php artisan test
 ```
 
-The feature tests cover successful order creation and totals, stock deduction, insufficient-stock rollback, queued confirmation dispatch, customer order history, and low-stock threshold filtering.
+The tests cover successful order creation and totals, stock deduction, rollback on insufficient stock, request validation, product creation and unique codes, stock replenishment and validation, order history, low-stock filtering, and storefront rendering.
 
-## AI prompt log and walkthrough
+Check PHP formatting with:
 
-The assignment requests screenshots of actual AI prompts if AI-assisted tools are used and a narrated 5–10 minute screen recording. Add genuine prompt screenshots to a `prompts/` directory and include the recording when preparing the submission; no fabricated screenshots or recording are included in this repository.
+```bash
+vendor/bin/pint --test
+```
+
+Build frontend assets with:
+
+```bash
+npm run build
+```
+
+## Assignment submission notes
+
+The assignment asks for screenshots of actual AI prompts when AI tools are used and a narrated 5–10 minute screen recording. Include genuine prompt screenshots in a `prompts/` directory or in this README and provide the narrated recording with the repository submission. No prompt screenshots or recording are fabricated or included here.

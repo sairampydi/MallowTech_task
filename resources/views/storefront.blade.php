@@ -14,7 +14,11 @@
                 <span class="brand-mark" aria-hidden="true">M</span>
                 <span>Store Billing</span>
             </div>
-            <span class="topbar-note">Order desk <span aria-hidden="true">·</span> Inventory connected</span>
+            <div class="topbar-actions">
+                <span class="topbar-note">Order desk <span aria-hidden="true">·</span> Inventory connected</span>
+                <button class="button button-nav" id="open-add-product" type="button">＋ Add product</button>
+                <button class="button button-nav button-nav-secondary" id="open-restock" type="button">↗ Restock</button>
+            </div>
         </div>
     </header>
 
@@ -155,6 +159,76 @@
             </div>
         </section>
     </main>
+
+    <dialog class="modal" id="add-product-dialog" aria-labelledby="add-product-heading">
+        <form class="modal-form" id="create-product-form">
+            <div class="modal-header">
+                <div>
+                    <p class="eyebrow">Inventory</p>
+                    <h2 id="add-product-heading">Add product</h2>
+                    <p class="modal-description">Create a new item in your product catalog.</p>
+                </div>
+                <button class="modal-close" type="button" data-close-dialog aria-label="Close dialog">×</button>
+            </div>
+            <div class="modal-fields">
+                <div class="field">
+                    <label for="new-product-code">Product code</label>
+                    <input id="new-product-code" name="code" type="text" maxlength="255" autocomplete="off" placeholder="e.g. BISCUIT-100" required>
+                </div>
+                <div class="field">
+                    <label for="new-product-name">Product name</label>
+                    <input id="new-product-name" name="name" type="text" maxlength="255" placeholder="e.g. Counter Biscuit" required>
+                </div>
+                <div class="modal-fields-row">
+                    <div class="field">
+                        <label for="new-product-price">Price (₹)</label>
+                        <input id="new-product-price" name="price" type="number" min="0" max="99999999.99" step="0.01" inputmode="decimal" placeholder="0.00" required>
+                    </div>
+                    <div class="field">
+                        <label for="new-product-tax-rate">Tax rate (%)</label>
+                        <input id="new-product-tax-rate" name="tax_rate" type="number" min="0" max="100" step="0.01" inputmode="decimal" placeholder="0.00" required>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="new-product-stock">Initial stock</label>
+                    <input id="new-product-stock" name="stock" type="number" min="0" step="1" inputmode="numeric" placeholder="0" required>
+                </div>
+            </div>
+            <p class="modal-error" id="create-product-error" role="alert"></p>
+            <div class="modal-actions">
+                <button class="button button-secondary" type="button" data-close-dialog>Cancel</button>
+                <button class="button button-primary" id="create-product-submit" type="submit">Save product</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog class="modal" id="restock-dialog" aria-labelledby="restock-heading">
+        <form class="modal-form" id="restock-form">
+            <div class="modal-header">
+                <div>
+                    <p class="eyebrow">Inventory</p>
+                    <h2 id="restock-heading">Restock product</h2>
+                    <p class="modal-description">Add units to a product's current stock.</p>
+                </div>
+                <button class="modal-close" type="button" data-close-dialog aria-label="Close dialog">×</button>
+            </div>
+            <div class="modal-fields">
+                <div class="field">
+                    <label for="restock-product">Product</label>
+                    <select class="product-select" id="restock-product" name="product_id" required></select>
+                </div>
+                <div class="field">
+                    <label for="restock-quantity">Quantity to add</label>
+                    <input id="restock-quantity" name="quantity" type="number" min="1" step="1" inputmode="numeric" placeholder="Enter quantity" required>
+                </div>
+            </div>
+            <p class="modal-error" id="restock-error" role="alert"></p>
+            <div class="modal-actions">
+                <button class="button button-secondary" type="button" data-close-dialog>Cancel</button>
+                <button class="button button-primary" id="restock-submit" type="submit">Add stock</button>
+            </div>
+        </form>
+    </dialog>
 
     <template id="product-row-template">
         <tr>

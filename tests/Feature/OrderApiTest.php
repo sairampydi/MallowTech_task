@@ -209,6 +209,12 @@ class OrderApiTest extends TestCase
             ->assertSee('New order')
             ->assertSee('Counter Notebook')
             ->assertSee('Generate bill')
-            ->assertSee('id="new-order"', false);
+            ->assertSee('id="new-order"', false)
+            ->assertSee('id="open-add-product"', false)
+            ->assertSee('id="open-restock"', false)
+            ->assertSee('for="new-product-code"', false)
+            ->assertSee('for="new-product-tax-rate"', false)
+            ->assertSee('for="restock-product"', false)
+            ->assertSee('for="restock-quantity"', false);
     }
 }

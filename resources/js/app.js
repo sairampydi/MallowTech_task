@@ -11,6 +11,11 @@ if (config) {
     const submitButton = document.querySelector('#submit-order');
     const errorNotice = document.querySelector('#order-error');
     const billCard = document.querySelector('#bill-card');
+    const addProductDialog = document.querySelector('#add-product-dialog');
+    const restockDialog = document.querySelector('#restock-dialog');
+    const createProductForm = document.querySelector('#create-product-form');
+    const restockForm = document.querySelector('#restock-form');
+    const restockProductSelect = document.querySelector('#restock-product');
     let orderSubmitted = false;
     let orderTotals = { grandTotal: 0 };
 
@@ -20,6 +25,51 @@ if (config) {
     }).format(cents / 100);
 
     const toCents = (amount) => Math.round(Number(amount) * 100);
+
+    function populateProductSelect(select, selectedValue = '') {
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = productCatalog.size > 0 ? 'Choose a product' : 'No products available';
+        select.replaceChildren(placeholder);
+
+        for (const product of productCatalog.values()) {
+            const option = document.createElement('option');
+            option.value = product.id;
+            option.disabled = product.stock < 1;
+            option.textContent = `${product.name} · ${product.code} · ${product.stock} in stock`;
+            select.append(option);
+        }
+
+        select.value = String(selectedValue);
+    }
+
+    function refreshProductSelects() {
+        productRows.querySelectorAll('.product-select').forEach((select) => {
+            populateProductSelect(select, select.value);
+        });
+        populateProductSelect(restockProductSelect, restockProductSelect.value);
+    }
+
+    function showModalError(element, message) {
+        element.textContent = message;
+        element.classList.add('is-visible');
+    }
+
+    function clearModalError(element) {
+        element.textContent = '';
+        element.classList.remove('is-visible');
+    }
+
+    async function readApiResponse(response) {
+        const payload = await response.json();
+
+        if (!response.ok) {
+            const messages = Object.values(payload.errors || {}).flat();
+            throw new Error(messages.join(' ') || payload.message || `Request failed (${response.status}).`);
+        }
+
+        return payload;
+    }
 
     function updateSummary() {
         let subtotalCents = 0;
@@ -76,21 +126,8 @@ if (config) {
 
     function addProductRow() {
         const row = rowTemplate.content.firstElementChild.cloneNode(true);
-        const select = row.querySelector('.product-select');
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = 'Choose a product';
-        select.append(placeholder);
-
-        for (const product of productCatalog.values()) {
-            const option = document.createElement('option');
-            option.value = product.id;
-            option.disabled = product.stock < 1;
-            option.textContent = `${product.name} · ${product.code} · ${product.stock} in stock`;
-            select.append(option);
-        }
-
         productRows.append(row);
+        populateProductSelect(row.querySelector('.product-select'));
         updateSummary();
     }
 
@@ -210,6 +247,120 @@ if (config) {
     document.querySelector('#add-product').addEventListener('click', addProductRow);
     amountGivenInput.addEventListener('input', updateBalance);
 
+    document.querySelector('#open-add-product').addEventListener('click', () => {
+        clearModalError(document.querySelector('#create-product-error'));
+        addProductDialog.showModal();
+        document.querySelector('#new-product-code').focus();
+    });
+
+    document.querySelector('#open-restock').addEventListener('click', () => {
+        clearModalError(document.querySelector('#restock-error'));
+        refreshProductSelects();
+        restockDialog.showModal();
+        restockProductSelect.focus();
+    });
+
+    document.querySelectorAll('[data-close-dialog]').forEach((button) => {
+        button.addEventListener('click', () => button.closest('dialog').close());
+    });
+
+    addProductDialog.addEventListener('click', (event) => {
+        if (event.target === addProductDialog) {
+            addProductDialog.close();
+        }
+    });
+
+    restockDialog.addEventListener('click', (event) => {
+        if (event.target === restockDialog) {
+            restockDialog.close();
+        }
+    });
+
+    createProductForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const errorElement = document.querySelector('#create-product-error');
+        const saveButton = document.querySelector('#create-product-submit');
+        clearModalError(errorElement);
+
+        if (!createProductForm.reportValidity()) {
+            return;
+        }
+
+        const formData = new FormData(createProductForm);
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving…';
+
+        try {
+            const response = await fetch('/api/products', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    code: formData.get('code').trim(),
+                    name: formData.get('name').trim(),
+                    price: formData.get('price'),
+                    tax_rate: formData.get('tax_rate'),
+                    stock: Number(formData.get('stock')),
+                }),
+            });
+            const payload = await readApiResponse(response);
+            const product = payload.data;
+
+            productCatalog.set(product.id, product);
+            createProductForm.reset();
+            addProductDialog.close();
+            refreshProductSelects();
+            await refreshLowStock();
+        } catch (error) {
+            showModalError(errorElement, error.message);
+        } finally {
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save product';
+        }
+    });
+
+    restockForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const errorElement = document.querySelector('#restock-error');
+        const restockButton = document.querySelector('#restock-submit');
+        clearModalError(errorElement);
+
+        if (!restockForm.reportValidity()) {
+            return;
+        }
+
+        const productId = Number(restockProductSelect.value);
+        const quantity = Number(document.querySelector('#restock-quantity').value);
+        restockButton.disabled = true;
+        restockButton.textContent = 'Adding stock…';
+
+        try {
+            const response = await fetch(`/api/products/${productId}/restock`, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ quantity }),
+            });
+            const payload = await readApiResponse(response);
+
+            productCatalog.set(payload.data.id, payload.data);
+            restockForm.reset();
+            restockDialog.close();
+            refreshProductSelects();
+            updateSummary();
+            await refreshLowStock();
+        } catch (error) {
+            showModalError(errorElement, error.message);
+        } finally {
+            restockButton.disabled = false;
+            restockButton.textContent = 'Add stock';
+        }
+    });
+
     productRows.addEventListener('input', (event) => {
         if (event.target.matches('.quantity-input')) {
             updateSummary();
@@ -286,12 +437,7 @@ if (config) {
                     items,
                 }),
             });
-            const payload = await response.json();
-
-            if (!response.ok) {
-                const messages = Object.values(payload.errors || {}).flat();
-                throw new Error(messages.join(' ') || payload.message || 'The order could not be placed.');
-            }
+            const payload = await readApiResponse(response);
 
             orderSubmitted = true;
             submitButton.textContent = 'Order placed';
@@ -302,11 +448,11 @@ if (config) {
             amountGivenInput.disabled = true;
 
             for (const item of payload.data.items) {
-                const product = productCatalog.get(item.product_id);
-                if (product) {
-                    product.stock = item.product.stock;
+                if (item.product) {
+                    productCatalog.set(item.product_id, item.product);
                 }
             }
+            refreshProductSelects();
 
             document.querySelector('#stock-description').textContent =
                 `Products with fewer than ${config.lowStockThreshold} units remaining`;
